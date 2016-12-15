@@ -24,7 +24,8 @@ include_directories(src)
 aux_source_directory(src ${PROJECT_NAME}_SOURCES)
 add_executable(${PROJECT_NAME} ${${PROJECT_NAME}_SOURCES})
 add_dependencies(${PROJECT_NAME} iproute2)
-target_link_libraries(${PROJECT_NAME} tc_impl tc util netlink m dl)
+#target_link_libraries(${PROJECT_NAME} -Wl,-whole-archive tc_impl -Wl,-no-whole-archive tc util netlink m dl)
+target_link_libraries(${PROJECT_NAME} -Wl,-whole-archive tc_impl -Wl,-no-whole-archive tc util netlink m dl)
 
 set(CMAKE_INSTALL_PREFIX "/opt/unet")
 

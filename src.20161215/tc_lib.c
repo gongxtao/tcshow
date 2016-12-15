@@ -21,6 +21,8 @@
 #include "namespace.h"
 #include "tc_util.h"
 #include "tc_common.h"
+#include "tc_lib.h"
+#include "q_htb_new.h"
 
 static void *BODY;	/* cached handle dlopen(NULL) */
 static struct qdisc_util *qdisc_list;
@@ -153,8 +155,8 @@ noexist:
 
         memset(q, 0, sizeof(*q));
         q->id = strcpy(malloc(strlen(str)+1), str);
-        q->parse_qopt = parse_noqopt;
-        q->print_qopt = print_noqopt;
+        q->parse_qopt = htb_parse_opt;
+        q->print_qopt = htb_print_opt;
         goto reg;
     }
     return q;

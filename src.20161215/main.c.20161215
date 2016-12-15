@@ -22,10 +22,8 @@
 #include <fcntl.h>
 #include <syscall.h>
 #include "libnetlink.h"
-#include "SNAPSHOT.h"
 #include "utils.h"
-#include "tc_common.h"
-//#include "ll_map.h"
+#include "ll_map.h"
 #include "tc_util.h"
 #define __USE_GNU
 #include <sched.h>
@@ -48,19 +46,16 @@ int setns(int fd, int nstype)
 extern int tc_core_init(void);
 extern int do_qdisc(int argc, char **argv);
 
-int show_stats = 0;
+int show_stats = 1;
 int show_details = 0;
 int show_raw = 0;
-int show_pretty = 0;
+int show_pretty = 1;
 int show_graph = 0;
- 
-int batch_mode = 0;
+int timestamp = 0;
+
 int resolve_hosts = 0;
 int use_iec = 0;
-int force = 0;
-bool use_names = false;
-
-static int filter_ifindex = 0;
+int use_names = 0;
 
 struct rtnl_handle rth;
 
@@ -103,13 +98,12 @@ static void parse_gnet_stats2(struct rtattr *rta, struct gnet_stats2 *stats2) {
 	return;
 }
 
-int print_qdisc_new(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg) {
+int print_qdisc(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg) {
 	FILE *fp = (FILE *) arg;
 	struct tcmsg *t = NLMSG_DATA(n);
 	int len = n->nlmsg_len;
 	struct rtattr *tb[TCA_MAX + 1];
 	char abuf[256];
-    struct qdisc_util *q = NULL;
 
 	if (n->nlmsg_type != RTM_NEWQDISC && n->nlmsg_type != RTM_DELQDISC) {
 		fprintf(stderr, "Not a qdisc\n");
@@ -121,17 +115,13 @@ int print_qdisc_new(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg
 		return -1;
 	}
 
-    if (filter_ifindex && filter_ifindex != t->tcm_ifindex) {
-        return 0;
-    }
-
 	parse_rtattr(tb, TCA_MAX, TCA_RTA(t), len);
 
 	if (tb[TCA_KIND] == NULL) {
 		fprintf(stderr, "print_qdisc: NULL kind\n");
 		return -1;
 	}
-/*
+
 	if (tb[TCA_STATS2] == NULL) {
 		fprintf(stderr, "print_qdisc: NULL stats2\n");
 		return -1;
@@ -143,58 +133,12 @@ int print_qdisc_new(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg
 			ll_index_to_name(t->tcm_ifindex),
 			stats2.bs.bytes, stats2.bs.packets,
 			stats2.q.drops, stats2.q.overlimits, stats2.q.requeues, stats2.q.backlog, stats2.q.qlen);
-*/
-    fprintf(fp, "qdisc %s %x: ", rta_getattr_str(tb[TCA_KIND]), t->tcm_handle>>16);
-    if (t->tcm_parent == TC_H_ROOT)
-        fprintf(fp, "root ");
-    else if (t->tcm_parent) {
-        print_tc_classid(abuf, sizeof(abuf), t->tcm_parent);
-        fprintf(fp, "parent %s ", abuf);
-    }
-    if (t->tcm_info != 1) {
-        fprintf(fp, "refcnt %d ", t->tcm_info);
-    }
-    /* pfifo_fast is generic enough to warrant the hardcoding --JHS */
-
-    q = get_qdisc_kind(RTA_DATA(tb[TCA_KIND]));
-
-    if (tb[TCA_OPTIONS]) {
-        if (q)
-            q->print_qopt(q, fp, tb[TCA_OPTIONS]);
-        else
-            fprintf(fp, "[cannot parse qdisc parameters]");
-    }
-    fprintf(fp, "\n");
-    if (show_details && tb[TCA_STAB]) {
-        print_size_table(fp, " ", tb[TCA_STAB]);
-        fprintf(fp, "\n");
-    }
-    if (show_stats) {
-        struct rtattr *xstats = NULL;
-
-        if (tb[TCA_STATS] || tb[TCA_STATS2] || tb[TCA_XSTATS]) {
-            print_tcstats_attr(fp, tb, " ", &xstats);
-            fprintf(fp, "\n");
-        }
-
-        if (q && xstats && q->print_xstats) {
-            q->print_xstats(q, fp, xstats);
-            fprintf(fp, "\n");
-        }
-    }
 	fflush(fp);
 	return 0;
 }
 
-static int qdisc_list(FILE *qdiscFile, char *ns) {
+static int qdisc_list(FILE *qdiscFile) {
 	struct tcmsg t = { .tcm_family = AF_UNSPEC };
-    if (ns) {
-        if ((t.tcm_ifindex = ll_name_to_index(ns)) == 0) {
-            fprintf(stderr, "TCShow[%d]: Cannot find device \"%s\"\n", getpid(), ns);
-            return 1;
-        }
-        filter_ifindex = t.tcm_ifindex;
-    }
 
 	ll_init_map(&rth);
 
@@ -203,7 +147,7 @@ static int qdisc_list(FILE *qdiscFile, char *ns) {
 		return 1;
 	}
 
-	if (rtnl_dump_filter(&rth, print_qdisc_new, NULL == qdiscFile ? stdout : qdiscFile) < 0) {
+	if (rtnl_dump_filter(&rth, print_qdisc, NULL == qdiscFile ? stdout : qdiscFile) < 0) {
 		fprintf(stderr, "Dump terminated\n");
 		return 1;
 	}
@@ -247,6 +191,12 @@ void main(int argc, char **argv) {
         return;
     }
 
+    if (SeperateNS(argv[1]) == -1) {
+        fprintf(stderr, "TCShow[%d]: Failed to seperate ns\n", getpid());
+        return;
+    }
+
+    
 	tc_core_init();
 
 	if (rtnl_open(&rth, 0) < 0) {
@@ -254,10 +204,33 @@ void main(int argc, char **argv) {
 		return;
 	}
 
-    //qdisc_list(stdout, argv[1]);
-    do_qdisc(argc - 1, argv + 1);
-    do_filter(argc - 1, argv + 1);
-    do_class(argc - 1, argv + 1);
+    char buffer[16] = "";
+    FILE *qdiscFile = NULL;
+    char qdiscPathFile[64] = "/data/cnat_namespace/";
+    strncat(qdiscPathFile, argv[1], 43); // 64 - 21
+    while (gAbort) {
+        read(3, buffer, 16); 
+        if (NULL == qdiscFile) {
+            qdiscFile = fopen(qdiscPathFile, "w+");
+            if (NULL == qdiscFile) {
+                fprintf(stderr, "TCShow[%d] %s: Failed to open file[%s]",
+                        getpid(), argv[1], qdiscFile);
+
+                buffer[0] = '0';
+                buffer[1] = 0;
+                write(4, buffer, strlen(buffer));
+                sleep(0.5);
+                continue;
+            }
+        }
+	    qdisc_list(qdiscFile);
+        rewind(qdiscFile);
+
+        buffer[0] = '0';
+        buffer[1] = 0;
+        write(4, buffer, strlen(buffer));
+        sleep(0.5);
+    }
 	rtnl_close(&rth);
 
 	return;

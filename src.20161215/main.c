@@ -22,10 +22,8 @@
 #include <fcntl.h>
 #include <syscall.h>
 #include "libnetlink.h"
-#include "SNAPSHOT.h"
 #include "utils.h"
-#include "tc_common.h"
-//#include "ll_map.h"
+#include "ll_map.h"
 #include "tc_util.h"
 #define __USE_GNU
 #include <sched.h>
@@ -48,19 +46,19 @@ int setns(int fd, int nstype)
 extern int tc_core_init(void);
 extern int do_qdisc(int argc, char **argv);
 
-int show_stats = 0;
+int show_stats = 1;
 int show_details = 0;
 int show_raw = 0;
-int show_pretty = 0;
+int show_pretty = 1;
 int show_graph = 0;
- 
-int batch_mode = 0;
+int timestamp = 0;
+
 int resolve_hosts = 0;
 int use_iec = 0;
-int force = 0;
-bool use_names = false;
+int use_names = 0;
 
 static int filter_ifindex = 0;
+
 
 struct rtnl_handle rth;
 
