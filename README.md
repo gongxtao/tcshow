@@ -1,0 +1,2 @@
+- ## 采集namespace wi口tc信息
+    - ./tcshow namespace
