@@ -259,9 +259,8 @@ void main(int argc, char **argv) {
 		return;
 	}
 
-    char tcPathFile[64] = "/data/cnat_namespace/";
-    strncat(tcPathFile, argv[1], strlen(tcPathFile)); // ns
-    strncat(tcPathFile, "-wi", strlen(tcPathFile)); // ns-wo
+    char tcPathFile[64] = "";
+    sprintf(tcPathFile, "/data/cnat_namespace_traffic/%s/%s-wi", argv[1], argv[1]);
     int fd = open(tcPathFile, O_WRONLY|O_CREAT, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
     if (dup2(fd, fileno(stdout)) == -1) {
         fprintf(stderr, "TCShow[%d]: Failed to dup2\n", getpid());
@@ -278,18 +277,14 @@ void main(int argc, char **argv) {
     while (true) {
         read(3, buffer, sizeof(buffer) - 1);
 
-        //write(fd, "@qdisc\n", 7);
         do_qdisc(3, tcCmd);
-        //write(fd, "@filter\n", 8);
         do_filter(3, tcCmd);
-        //write(fd, "@class\n", 7);
         do_class(3, tcCmd);
 
         lseek(fd, SEEK_SET, 0);
         buffer[0] = '0';
         buffer[1] = 0;
         write(4, buffer, sizeof(buffer) - 1);
-        //sleep(0.5);
     }
     
     close(fd);
