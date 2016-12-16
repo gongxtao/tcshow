@@ -238,58 +238,46 @@ int SeperateNS(char *ns) {
 
 void main(int argc, char **argv) {
     if (argc < 2) {
-        fprintf(stderr, "TCShow[%d]: usage: %s namespace\n", getpid(), argv[0]);
+        fprintf(stderr, "TCShow-wo[%d]: usage: %s interface [interface]\n", getpid(), argv[0]);
         return;
     }
 
     if (geteuid()) {
-        fprintf(stderr, "TCShow[%d]: need run tcshow on %s as root\n", getpid(), argv[1]);
+        fprintf(stderr, "TCShow-wo[%d]: need run tcshow on %s as root\n", getpid(), argv[1]);
         return;
     }
-
-    if (SeperateNS(argv[1]) == -1) {
-        fprintf(stderr, "TCShow[%d]: Failed to seperate ns\n", getpid());
-        return;
-    }
-    
+        
 	tc_core_init();
 
 	if (rtnl_open(&rth, 0) < 0) {
-		fprintf(stderr, "TCShow[%d]: Cannot open rtnetlink\n", getpid());
+		fprintf(stderr, "TCShow-wo[%d]: Cannot open rtnetlink\n", getpid());
 		return;
 	}
 
-    char tcPathFile[64] = "/data/cnat_namespace/";
-    strncat(tcPathFile, argv[1], strlen(tcPathFile)); // ns
-    strncat(tcPathFile, "-wi", strlen(tcPathFile)); // ns-wo
+    char* tcCmd[3] = {"show", "dev", ""};
+    char tcPathFile[64] = "/data/cnat_namespace_traffic/tc-wo.data";
     int fd = open(tcPathFile, O_WRONLY|O_CREAT, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
     if (dup2(fd, fileno(stdout)) == -1) {
         fprintf(stderr, "TCShow[%d]: Failed to dup2\n", getpid());
         return;
     }
 
-    char wiInterface[16] = "";
-    strncpy(wiInterface, argv[1], sizeof(wiInterface) - 1);
-    strncat(wiInterface, "-wi", sizeof(wiInterface) - 1);
+    char *p = NULL;
+    char *s = argv[1];
+    char *d = "\n";
 
-    char* tcCmd[3] = {"show", "dev", wiInterface};
-    char buffer[16] = "";
+    p = strtok(s, d);
+    while (p) {
+        tcCmd[2] = p;
+        char ns[64] = "";
+        sprintf(ns, "@%s\n", tcCmd[2]);
 
-    while (true) {
-        read(3, buffer, sizeof(buffer) - 1);
-
-        //write(fd, "@qdisc\n", 7);
+        write(fd, ns, strlen(ns));
         do_qdisc(3, tcCmd);
-        //write(fd, "@filter\n", 8);
         do_filter(3, tcCmd);
-        //write(fd, "@class\n", 7);
         do_class(3, tcCmd);
 
-        lseek(fd, SEEK_SET, 0);
-        buffer[0] = '0';
-        buffer[1] = 0;
-        write(4, buffer, sizeof(buffer) - 1);
-        //sleep(0.5);
+        p = strtok(NULL, d);
     }
     
     close(fd);

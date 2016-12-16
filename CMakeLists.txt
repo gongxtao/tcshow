@@ -1,11 +1,11 @@
 cmake_minimum_required (VERSION 2.8)
 
-project (tcshow)
+project (tcshow_wo)
 
 set(CMAKE_VERBOSE_MAKEFILE true)
 
 set(CMAKE_BUILD_TYPE "RelWithDebInfo")
-# set(CMAKE_BUILD_TYPE "Debug")
+#set(CMAKE_BUILD_TYPE "Debug")
 message(STATUS "BUILD_TYPE=${CMAKE_BUILD_TYPE}, SVN_REVISION=${SVN_REVISION}, BUILD_NUMBER=${BUILD_NUMBER}")
 string(TOUPPER "${CMAKE_BUILD_TYPE}" BUILD_TYPE)
 
