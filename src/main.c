@@ -48,7 +48,7 @@ int setns(int fd, int nstype)
 extern int tc_core_init(void);
 extern int do_qdisc(int argc, char **argv);
 
-int show_stats = 0;
+int show_stats = 1;
 int show_details = 0;
 int show_raw = 0;
 int show_pretty = 0;
@@ -247,6 +247,11 @@ void main(int argc, char **argv) {
         return;
     }
 
+    if (SeperateNS(argv[1]) == -1) {
+        fprintf(stderr, "TCShow[%d]: Failed to seperate ns\n", getpid());
+        return;
+    }
+    
 	tc_core_init();
 
 	if (rtnl_open(&rth, 0) < 0) {
@@ -254,11 +259,40 @@ void main(int argc, char **argv) {
 		return;
 	}
 
-    //qdisc_list(stdout, argv[1]);
-    do_qdisc(argc - 1, argv + 1);
-    do_filter(argc - 1, argv + 1);
-    do_class(argc - 1, argv + 1);
-	rtnl_close(&rth);
+    char tcPathFile[64] = "/data/cnat_namespace/";
+    strncat(tcPathFile, argv[1], strlen(tcPathFile)); // ns
+    strncat(tcPathFile, "-wi", strlen(tcPathFile)); // ns-wo
+    int fd = open(tcPathFile, O_WRONLY|O_CREAT, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
+    if (dup2(fd, fileno(stdout)) == -1) {
+        fprintf(stderr, "TCShow[%d]: Failed to dup2\n", getpid());
+        return;
+    }
 
+    char wiInterface[16] = "";
+    strncpy(wiInterface, argv[1], sizeof(wiInterface) - 1);
+    strncat(wiInterface, "-wi", sizeof(wiInterface) - 1);
+
+    char* tcCmd[3] = {"show", "dev", wiInterface};
+    char buffer[16] = "";
+
+    while (true) {
+        read(3, buffer, sizeof(buffer) - 1);
+
+        //write(fd, "@qdisc\n", 7);
+        do_qdisc(3, tcCmd);
+        //write(fd, "@filter\n", 8);
+        do_filter(3, tcCmd);
+        //write(fd, "@class\n", 7);
+        do_class(3, tcCmd);
+
+        lseek(fd, SEEK_SET, 0);
+        buffer[0] = '0';
+        buffer[1] = 0;
+        write(4, buffer, sizeof(buffer) - 1);
+        //sleep(0.5);
+    }
+    
+    close(fd);
+	rtnl_close(&rth);
 	return;
 }

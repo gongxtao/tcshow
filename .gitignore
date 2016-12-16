@@ -2,3 +2,5 @@
 *.xml
 .cproject
 .project
+build
+*.swp
