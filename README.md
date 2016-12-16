@@ -1,0 +1,2 @@
+- ## 采集namespace wo口网卡tc信息
+    - ./tcshow_wo interface [interface]
