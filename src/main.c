@@ -271,8 +271,8 @@ void main(int argc, char **argv) {
         tcCmd[2] = p;
         char ns[64] = "";
         sprintf(ns, "@%s\n", tcCmd[2]);
-
         write(fd, ns, strlen(ns));
+
         do_qdisc(3, tcCmd);
         do_filter(3, tcCmd);
         do_class(3, tcCmd);
