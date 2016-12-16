@@ -263,7 +263,7 @@ void main(int argc, char **argv) {
     sprintf(tcPathFile, "/data/cnat_namespace_traffic/%s/%s-wi", argv[1], argv[1]);
     int fd = open(tcPathFile, O_WRONLY|O_CREAT, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
     if (dup2(fd, fileno(stdout)) == -1) {
-        fprintf(stderr, "TCShow[%d]: Failed to dup2\n", getpid());
+        fprintf(stderr, "TCShow[%d]: Failed to dup2[path:%s]\n", getpid(), tcPathFile);
         return;
     }
 
@@ -273,9 +273,10 @@ void main(int argc, char **argv) {
 
     char* tcCmd[3] = {"show", "dev", wiInterface};
     char buffer[16] = "";
+    char bufferbak[16] = "";
 
     while (true) {
-        read(3, buffer, sizeof(buffer) - 1);
+        read(3, bufferbak, sizeof(buffer) - 1);
 
         do_qdisc(3, tcCmd);
         do_filter(3, tcCmd);
@@ -284,7 +285,7 @@ void main(int argc, char **argv) {
         lseek(fd, SEEK_SET, 0);
         buffer[0] = '0';
         buffer[1] = 0;
-        write(4, buffer, sizeof(buffer) - 1);
+        write(4, buffer, strlen(buffer));
     }
     
     close(fd);
