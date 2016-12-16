@@ -255,7 +255,7 @@ void main(int argc, char **argv) {
 	}
 
     char* tcCmd[3] = {"show", "dev", ""};
-    char tcPathFile[64] = "/data/cnat_namespace_traffic/tc-wo.data";
+    char tcPathFile[64] = "/data/cnat_namespace_traffic/tc-wo.data.cache";
     int fd = open(tcPathFile, O_WRONLY|O_CREAT, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
     if (dup2(fd, fileno(stdout)) == -1) {
         fprintf(stderr, "TCShow[%d]: Failed to dup2\n", getpid());
