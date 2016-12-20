@@ -273,19 +273,15 @@ void main(int argc, char **argv) {
 
     char* tcCmd[3] = {"show", "dev", wiInterface};
     char buffer[16] = "";
-    char bufferbak[16] = "";
 
-    while (true) {
-        read(3, bufferbak, sizeof(buffer) - 1);
+    while (gAbort) {
+        read(3, buffer, sizeof(buffer) - 1);
 
         do_qdisc(3, tcCmd);
         do_filter(3, tcCmd);
         do_class(3, tcCmd);
 
         lseek(fd, SEEK_SET, 0);
-        buffer[0] = '0';
-        buffer[1] = 0;
-        write(4, buffer, strlen(buffer));
     }
     
     close(fd);
