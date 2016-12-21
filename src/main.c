@@ -48,6 +48,9 @@ int setns(int fd, int nstype)
 extern int tc_core_init(void);
 extern int do_qdisc(int argc, char **argv);
 
+// read si
+char buffer[16] = "";
+
 int show_stats = 1;
 int show_details = 0;
 int show_raw = 0;
@@ -80,136 +83,6 @@ void handle_signal(int signo)
   }
 }
 
-
-static void parse_gnet_stats2(struct rtattr *rta, struct gnet_stats2 *stats2) {
-	struct rtattr *tbs[TCA_STATS_MAX + 1];
-	parse_rtattr_nested(tbs, TCA_STATS_MAX, rta);
-
-	if (tbs[TCA_STATS_BASIC]) {
-		memcpy(&stats2->bs, RTA_DATA(tbs[TCA_STATS_BASIC]),
-				MIN(RTA_PAYLOAD(tbs[TCA_STATS_BASIC]), sizeof(stats2->bs)));
-	}
-
-	if (tbs[TCA_STATS_QUEUE]) {
-		memcpy(&stats2->q, RTA_DATA(tbs[TCA_STATS_QUEUE]),
-				MIN(RTA_PAYLOAD(tbs[TCA_STATS_QUEUE]), sizeof(stats2->q)));
-	}
-
-	if (tbs[TCA_STATS_RATE_EST64]) {
-		memcpy(&stats2->re, RTA_DATA(tbs[TCA_STATS_RATE_EST64]),
-				MIN(RTA_PAYLOAD(tbs[TCA_STATS_RATE_EST64]),
-						sizeof(stats2->re)));
-	}
-	return;
-}
-
-int print_qdisc_new(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg) {
-	FILE *fp = (FILE *) arg;
-	struct tcmsg *t = NLMSG_DATA(n);
-	int len = n->nlmsg_len;
-	struct rtattr *tb[TCA_MAX + 1];
-	char abuf[256];
-    struct qdisc_util *q = NULL;
-
-	if (n->nlmsg_type != RTM_NEWQDISC && n->nlmsg_type != RTM_DELQDISC) {
-		fprintf(stderr, "Not a qdisc\n");
-		return 0;
-	}
-	len -= NLMSG_LENGTH(sizeof(*t));
-	if (len < 0) {
-		fprintf(stderr, "Wrong len %d\n", len);
-		return -1;
-	}
-
-    if (filter_ifindex && filter_ifindex != t->tcm_ifindex) {
-        return 0;
-    }
-
-	parse_rtattr(tb, TCA_MAX, TCA_RTA(t), len);
-
-	if (tb[TCA_KIND] == NULL) {
-		fprintf(stderr, "print_qdisc: NULL kind\n");
-		return -1;
-	}
-/*
-	if (tb[TCA_STATS2] == NULL) {
-		fprintf(stderr, "print_qdisc: NULL stats2\n");
-		return -1;
-	}
-
-	struct gnet_stats2 stats2 = { 0 };
-	parse_gnet_stats2(tb[TCA_STATS2], &stats2);
-	fprintf(fp, "dev: %s, sent_bytes: %llu, sent_pkts: %u, dropped: %u, overlimits: %u, requeues: %u, backlog: %u, qlen: %u\n",
-			ll_index_to_name(t->tcm_ifindex),
-			stats2.bs.bytes, stats2.bs.packets,
-			stats2.q.drops, stats2.q.overlimits, stats2.q.requeues, stats2.q.backlog, stats2.q.qlen);
-*/
-    fprintf(fp, "qdisc %s %x: ", rta_getattr_str(tb[TCA_KIND]), t->tcm_handle>>16);
-    if (t->tcm_parent == TC_H_ROOT)
-        fprintf(fp, "root ");
-    else if (t->tcm_parent) {
-        print_tc_classid(abuf, sizeof(abuf), t->tcm_parent);
-        fprintf(fp, "parent %s ", abuf);
-    }
-    if (t->tcm_info != 1) {
-        fprintf(fp, "refcnt %d ", t->tcm_info);
-    }
-    /* pfifo_fast is generic enough to warrant the hardcoding --JHS */
-
-    q = get_qdisc_kind(RTA_DATA(tb[TCA_KIND]));
-
-    if (tb[TCA_OPTIONS]) {
-        if (q)
-            q->print_qopt(q, fp, tb[TCA_OPTIONS]);
-        else
-            fprintf(fp, "[cannot parse qdisc parameters]");
-    }
-    fprintf(fp, "\n");
-    if (show_details && tb[TCA_STAB]) {
-        print_size_table(fp, " ", tb[TCA_STAB]);
-        fprintf(fp, "\n");
-    }
-    if (show_stats) {
-        struct rtattr *xstats = NULL;
-
-        if (tb[TCA_STATS] || tb[TCA_STATS2] || tb[TCA_XSTATS]) {
-            print_tcstats_attr(fp, tb, " ", &xstats);
-            fprintf(fp, "\n");
-        }
-
-        if (q && xstats && q->print_xstats) {
-            q->print_xstats(q, fp, xstats);
-            fprintf(fp, "\n");
-        }
-    }
-	fflush(fp);
-	return 0;
-}
-
-static int qdisc_list(FILE *qdiscFile, char *ns) {
-	struct tcmsg t = { .tcm_family = AF_UNSPEC };
-    if (ns) {
-        if ((t.tcm_ifindex = ll_name_to_index(ns)) == 0) {
-            fprintf(stderr, "TCShow[%d]: Cannot find device \"%s\"\n", getpid(), ns);
-            return 1;
-        }
-        filter_ifindex = t.tcm_ifindex;
-    }
-
-	ll_init_map(&rth);
-
-	if (rtnl_dump_request(&rth, RTM_GETQDISC, &t, sizeof(t)) < 0) {
-		perror("Cannot send dump request");
-		return 1;
-	}
-
-	if (rtnl_dump_filter(&rth, print_qdisc_new, NULL == qdiscFile ? stdout : qdiscFile) < 0) {
-		fprintf(stderr, "Dump terminated\n");
-		return 1;
-	}
-	return 0;
-}
-
 int SeperateNS(char *ns) {
     // 网络隔离
     char nspath[128] = "/var/run/netns/";
@@ -232,6 +105,28 @@ int SeperateNS(char *ns) {
     // 父进程退出子进程同步退出
     signal(SIGHUP, handle_signal);
     prctl(PR_SET_PDEATHSIG, SIGHUP);
+
+    return 0;
+}
+
+int ReadSICycle(FILE **pSIFile, const char *siCyclePath) {
+    if (NULL == *pSIFile) {
+        *pSIFile = fopen(siCyclePath, "r");
+        if (NULL == *pSIFile) {
+            fprintf(stderr, "DDOS[%d]: Failed to fopen file[%s]\n", getpid(), siCyclePath);
+            buffer[0] = '0';
+            buffer[1] = 0;
+            write(4, buffer, strlen(buffer));
+            continue;
+        }
+    }
+
+    if (fgets(buffer, sizeof(buffer) - 1 , pSIFile) == NULL ){
+        fprintf(stderr, "DDOS[%d]: Failed to read file[%s]\n", getpid(), siCyclePath);
+        continue;
+    }
+    write(4, buffer, strlen(buffer));
+    rewind(pSIFile);
 
     return 0;
 }
@@ -268,23 +163,29 @@ void main(int argc, char **argv) {
     }
 
     char wiInterface[16] = "";
-    strncpy(wiInterface, argv[1], sizeof(wiInterface) - 1);
-    strncat(wiInterface, "-wi", sizeof(wiInterface) - 1);
+    sprintf(wiInterface, "%s-wi", argv[1]);
 
     char* tcCmd[3] = {"show", "dev", wiInterface};
-    char buffer[16] = "";
+
+    char siCyclePath[64] = "";
+    sprintf(siCyclePath, "/sys/class/net/%s-li/si_cycles", argv[1]);
+    FILE *pSIFile = fopen(siCyclePath, "r");
 
     while (gAbort) {
         read(3, buffer, sizeof(buffer) - 1);
 
+        // read tc
         do_qdisc(3, tcCmd);
         do_filter(3, tcCmd);
         do_class(3, tcCmd);
 
         lseek(fd, SEEK_SET, 0);
+
+        // read si
     }
     
     close(fd);
+    fclose(pSIFile);
 	rtnl_close(&rth);
 	return;
 }

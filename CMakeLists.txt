@@ -1,6 +1,6 @@
 cmake_minimum_required (VERSION 2.8)
 
-project (tcshow)
+project (netnsAgent)
 
 set(CMAKE_VERBOSE_MAKEFILE true)
 
