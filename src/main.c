@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <sys/types.h>
 #include <linux/pkt_sched.h>
 #include <errno.h>
 #include <string.h>
@@ -261,6 +262,8 @@ void main(int argc, char **argv) {
         fprintf(stderr, "TCShow[%d]: Failed to dup2\n", getpid());
         return;
     }
+    // flush file
+    ftruncate(fd, 0);
 
     char *p = NULL;
     char *s = argv[1];
